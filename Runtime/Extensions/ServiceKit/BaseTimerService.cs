@@ -1,7 +1,7 @@
-﻿using System;
-using Nonatomic.ServiceKit;
+﻿#if TIMERKIT_SERVICEKIT_SUPPORT
 
-#if TIMERKIT_SERVICEKIT_SUPPORT
+using System;
+using Nonatomic.ServiceKit;
 
 namespace Nonatomic.TimerKit.Extensions.ServiceKit
 {

@@ -27,10 +27,11 @@ Whether you're building a countdown for a game level, managing cooldowns, or tri
 - **Extensible Architecture**: Multiple timer classes for different complexity needs.
 - **Service Locator Support**: Optional integration with dependency injection patterns.
 
-### Recent Changes (v0.10.0)
-- **Zero-Allocation Updates**: Complete rewrite of milestone processing for allocation-free per-frame updates
-- **Performance Optimized**: All hot-path code now allocates 0 bytes per frame
-- **Early Exit Optimization**: Timer skips milestone processing entirely when no milestones exist
+### Recent Changes (v0.12.0)
+- **Fixed**: package now compiles in projects without ServiceKit installed
+- **Fixed**: recurring milestones re-trigger when a timer is restarted with `StartTimer()` alone
+- **Fixed**: milestones sharing a trigger value across different time types now trigger independently
+- **Changed**: range milestone intervals must be greater than zero (the constructor now throws)
 
 See [CHANGELOG.md](CHANGELOG.md) for complete version history.
 
@@ -339,7 +340,8 @@ public class GameSessionTimeSource : MonoBehaviour, ITimeSource
 }
 
 // Use custom time source with a timer
-var sessionTimeSource = new GameSessionTimeSource();
+// (MonoBehaviour time sources must be added as components, not constructed with new)
+var sessionTimeSource = gameObject.AddComponent<GameSessionTimeSource>();
 var timer = new StandardTimer(300f, sessionTimeSource);
 timer.StartTimer();
 // Timer now syncs with sessionTimeSource instead of tracking its own time
@@ -372,22 +374,43 @@ public class NetworkTimeProvider : TimeSourceProvider
 }
 ```
 
-Attach the `NetworkTimeProvider` component to the same GameObject as any component implementing `ITimer`, and they will automatically connect. The TimeSourceProvider works with any `ITimer` implementation, not just the concrete `Timer` MonoBehaviour.
+Attach the `NetworkTimeProvider` component to the same GameObject as a `Timer` component and they will connect automatically. Note that the automatic connection requires the concrete `Timer` MonoBehaviour; other `ITimer` implementations will log a warning and remain unconnected.
 
-### Service Locator Integration
+### Service Integration
 
-When the `SERVICE_LOCATOR` preprocessor directive is defined, you can use dependency injection:
+TimerKit ships with optional integrations that activate automatically when the matching package is installed (via assembly definition version defines):
+
+- Installing [ServiceKit](https://github.com/PaulNonatomic/ServiceKit) 2.0.0+ defines `TIMERKIT_SERVICEKIT_SUPPORT`
+- Installing [ServiceLocator](https://github.com/PaulNonatomic/ServiceLocator) 0.5.0+ defines `TIMERKIT_SERVICE_LOCATOR_SUPPORT`
+
+#### ServiceKit
+
+Use the built-in `TimerService` (registered as `ITimerService`), or derive your own:
 
 ```csharp
-// Custom timer service
-public class GameTimerService : BaseTimerService<IGameTimerService>
+using Nonatomic.ServiceKit;
+using Nonatomic.TimerKit.Extensions.ServiceKit;
+
+public interface IGameTimerService : IBaseTimerService { }
+
+[Service(typeof(IGameTimerService))]
+public class GameTimerService : BaseTimerService, IGameTimerService
 {
     // Your custom timer logic here
 }
+```
 
-// Register and use
-ServiceLocator.Register<IGameTimerService>(gameTimerService);
-var timerService = ServiceLocator.Get<IGameTimerService>();
+#### ServiceLocator
+
+```csharp
+using Nonatomic.TimerKit.Extensions.ServiceLocator;
+
+public interface IGameTimerService : IBaseTimerService { }
+
+public class GameTimerService : BaseTimerService<IGameTimerService>, IGameTimerService
+{
+    // Your custom timer logic here
+}
 ```
 
 ## Migration Guide

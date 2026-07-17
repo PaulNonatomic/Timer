@@ -110,6 +110,27 @@ namespace Tests.EditMode
 		}
 
 		[Test]
+		public void Milestones_WithSameTriggerValue_DifferentTimeTypes_TriggerIndependently()
+		{
+			var timer = new StandardTimer(20f);
+			bool elapsedTriggered = false;
+			bool remainingTriggered = false;
+
+			timer.AddMilestone(new TimerMilestone(TimeType.TimeElapsed, 5f, () => elapsedTriggered = true));
+			timer.AddMilestone(new TimerMilestone(TimeType.TimeRemaining, 5f, () => remainingTriggered = true));
+
+			timer.StartTimer();
+			timer.Update(5f); // TimeElapsed = 5, TimeRemaining = 15
+
+			Assert.IsTrue(elapsedTriggered, "TimeElapsed milestone should trigger at 5 seconds elapsed");
+			Assert.IsFalse(remainingTriggered, "TimeRemaining milestone should not trigger until 5 seconds remain");
+
+			timer.Update(10f); // TimeRemaining = 5
+
+			Assert.IsTrue(remainingTriggered, "TimeRemaining milestone should trigger at 5 seconds remaining");
+		}
+
+		[Test]
 		public void Timer_WithManyMilestonesAtSameTriggerValue_AllTrigger()
 		{
 			var timer = new StandardTimer(10f);
@@ -380,46 +401,28 @@ namespace Tests.EditMode
 		#region Range Milestone Edge Cases
 
 		[Test]
-		public void RangeMilestone_WithZeroInterval()
+		public void RangeMilestone_WithZeroInterval_Throws()
 		{
-			var timer = new StandardTimer(10f);
-			int triggerCount = 0;
-
-			// Zero interval should probably throw or be handled gracefully
-			var milestone = new TimerRangeMilestone(
+			// A zero interval would otherwise loop forever during interval calculation
+			Assert.Throws<ArgumentOutOfRangeException>(() => new TimerRangeMilestone(
 				TimeType.TimeRemaining,
 				8f,
 				5f,
 				0f, // Zero interval
-				() => triggerCount++
-			);
-
-			timer.AddRangeMilestone(milestone);
-			timer.StartTimer();
-
-			// Depending on implementation, this might cause issues or be handled gracefully
-			// Test documents current behavior
+				() => { }
+			));
 		}
 
 		[Test]
-		public void RangeMilestone_WithNegativeInterval()
+		public void RangeMilestone_WithNegativeInterval_Throws()
 		{
-			var timer = new StandardTimer(10f);
-			int triggerCount = 0;
-
-			var milestone = new TimerRangeMilestone(
+			Assert.Throws<ArgumentOutOfRangeException>(() => new TimerRangeMilestone(
 				TimeType.TimeRemaining,
 				8f,
 				5f,
 				-1f, // Negative interval
-				() => triggerCount++
-			);
-
-			timer.AddRangeMilestone(milestone);
-			timer.StartTimer();
-			timer.Update(10f);
-
-			// Test documents current behavior with negative interval
+				() => { }
+			));
 		}
 
 		[Test]

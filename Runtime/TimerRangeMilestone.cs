@@ -41,9 +41,12 @@ namespace Nonatomic.TimerKit
 		/// <param name="interval">The interval at which to trigger within the range</param>
 		/// <param name="callback">The callback to execute at each interval</param>
 		/// <param name="isRecurring">Whether this milestone should re-trigger every time the timer restarts</param>
+		/// <exception cref="ArgumentOutOfRangeException">Thrown when interval is zero or negative.</exception>
 		public TimerRangeMilestone(TimeType type, float rangeStart, float rangeEnd, float interval, Action callback, bool isRecurring = false)
 			: base(type, CalculateInitialTriggerValue(type, rangeStart), callback, isRecurring)
 		{
+			if (interval <= 0f) throw new ArgumentOutOfRangeException(nameof(interval), interval, "Interval must be greater than zero.");
+
 			RangeStart = rangeStart;
 			RangeEnd = rangeEnd;
 			Interval = interval;

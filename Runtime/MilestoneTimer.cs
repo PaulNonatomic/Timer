@@ -87,7 +87,7 @@ namespace Nonatomic.TimerKit
 		/// <param name="rangeEnd">The end of the range (lower value for TimeRemaining)</param>
 		/// <param name="interval">The interval at which to trigger callbacks</param>
 		/// <param name="callback">The callback to execute at each interval</param>
-		/// <returns">The created TimerRangeMilestone</returns>
+		/// <returns>The created TimerRangeMilestone</returns>
 		public virtual TimerRangeMilestone AddRangeMilestone(TimeType type, float rangeStart, float rangeEnd, float interval, Action callback, bool isRecurring = false)
 		{
 			var rangeMilestone = new TimerRangeMilestone(type, rangeStart, rangeEnd, interval, callback, isRecurring);
@@ -149,6 +149,16 @@ namespace Nonatomic.TimerKit
 			ResetRecurringRegularMilestones();
 		}
 
+		/// <summary>
+		/// Called when the timer starts or restarts.
+		/// Re-arms range milestones and recurring milestones so they trigger again in the new round.
+		/// </summary>
+		protected override void OnTimerStarted()
+		{
+			ResetRangeMilestones();
+			ResetRecurringRegularMilestones();
+		}
+
 		private bool _processingMilestones;
 		private Dictionary<Guid, TimerMilestone> _milestonesById = new();
 		private SortedList<float, List<Guid>> _milestonesByTriggerValue = new();
@@ -162,7 +172,7 @@ namespace Nonatomic.TimerKit
 		private List<(TimerMilestone milestone, float? intervalValue)> _milestonesToTrigger = new();
 		private List<Guid> _exhaustedMilestoneIds = new();
 		private List<(Guid id, TimerRangeMilestone milestone)> _recurringMilestones = new();
-		private List<Guid> _recurringRegularMilestoneIds = new();
+		private List<Guid> _triggeredIds = new();
 		private HashSet<Guid> _processedIds = new();
 
 		// Pooled collection for CalculateCrossedIntervals
@@ -283,7 +293,7 @@ namespace Nonatomic.TimerKit
 			// CollectMilestonesForProcessing now populates pooled class-level collections
 			CollectMilestonesForProcessing(triggerIds, triggerValue);
 
-			RemoveMilestonesFromTriggerValue(triggerValue);
+			RemoveTriggeredMilestonesFromTriggerValue(triggerValue);
 			RemoveExhaustedMilestones(_exhaustedMilestoneIds);
 
 			// Use index-based iteration to avoid List enumerator allocation
@@ -302,7 +312,7 @@ namespace Nonatomic.TimerKit
 			_milestonesToTrigger.Clear();
 			_exhaustedMilestoneIds.Clear();
 			_recurringMilestones.Clear();
-			_recurringRegularMilestoneIds.Clear();
+			_triggeredIds.Clear();
 			_processedIds.Clear();
 
 			// Use index-based iteration to avoid List enumerator allocation
@@ -314,20 +324,26 @@ namespace Nonatomic.TimerKit
 				// Skip duplicates within the same trigger value
 				if (!_processedIds.Add(id)) continue;
 
-				if (!_milestonesById.TryGetValue(id, out var milestone)) continue;
+				if (!_milestonesById.TryGetValue(id, out var milestone))
+				{
+					// Orphaned id with no backing milestone; clean it out of the bucket
+					_triggeredIds.Add(id);
+					continue;
+				}
+
+				// Milestones of different TimeTypes can share the same numeric trigger
+				// value; only process the ones whose own condition has been met
+				if (!ShouldTrigger(milestone)) continue;
+
+				_triggeredIds.Add(id);
 
 				if (milestone is not TimerRangeMilestone rangeMilestone)
 				{
 					_milestonesToTrigger.Add((milestone, null));
-					// Only mark as exhausted if not recurring
+					// Recurring milestones stay registered and re-arm on start/reset
 					if (!milestone.IsRecurring)
 					{
 						_exhaustedMilestoneIds.Add(id);
-					}
-					else
-					{
-						// Recurring regular milestones need to be re-added
-						_recurringRegularMilestoneIds.Add(id);
 					}
 					continue;
 				}
@@ -372,6 +388,10 @@ namespace Nonatomic.TimerKit
 			var rangeStart = rangeMilestone.RangeStart;
 			var rangeEnd = rangeMilestone.RangeEnd;
 
+			// Duration only bounds time-based types; progress types are in 0..1
+			var isTimeBased = rangeMilestone.Type == TimeType.TimeRemaining || rangeMilestone.Type == TimeType.TimeElapsed;
+			var upperBound = isTimeBased ? Duration : 1f;
+
 			if (rangeMilestone.Type == TimeType.TimeRemaining || rangeMilestone.Type == TimeType.ProgressRemaining)
 			{
 				// For decreasing types, we move from higher to lower values
@@ -381,7 +401,7 @@ namespace Nonatomic.TimerKit
 					nextTrigger = lastValue - interval;
 				}
 
-				while (nextTrigger >= rangeEnd && nextTrigger >= currentValue && nextTrigger <= Duration)
+				while (nextTrigger >= rangeEnd && nextTrigger >= currentValue && nextTrigger <= upperBound)
 				{
 					_crossedIntervals.Add(nextTrigger);
 					nextTrigger -= interval;
@@ -396,7 +416,7 @@ namespace Nonatomic.TimerKit
 					nextTrigger = lastValue + interval;
 				}
 
-				while (nextTrigger <= rangeEnd && nextTrigger <= currentValue && nextTrigger <= Duration)
+				while (nextTrigger <= rangeEnd && nextTrigger <= currentValue && nextTrigger <= upperBound)
 				{
 					_crossedIntervals.Add(nextTrigger);
 					nextTrigger += interval;
@@ -416,9 +436,15 @@ namespace Nonatomic.TimerKit
 			};
 		}
 
-		private void RemoveMilestonesFromTriggerValue(float triggerValue)
+		private void RemoveTriggeredMilestonesFromTriggerValue(float triggerValue)
 		{
-			_milestonesByTriggerValue.Remove(triggerValue);
+			// Only remove the milestones that actually triggered; untriggered
+			// milestones sharing the same numeric value stay armed in the bucket
+			var count = _triggeredIds.Count;
+			for (int i = 0; i < count; i++)
+			{
+				RemoveMilestoneFromTriggerValue(_triggeredIds[i], triggerValue);
+			}
 		}
 
 		private void RemoveExhaustedMilestones(List<Guid> exhaustedMilestoneIds)
@@ -440,16 +466,6 @@ namespace Nonatomic.TimerKit
 				var (id, rangeMilestone) = recurringMilestones[i];
 				rangeMilestone.UpdateTriggerValue();
 				AddMilestoneToTriggerValue(id, rangeMilestone.TriggerValue);
-			}
-		}
-
-		private void ReAddRecurringRegularMilestones(float triggerValue, List<Guid> recurringRegularMilestoneIds)
-		{
-			// Use index-based iteration to avoid List enumerator allocation
-			var count = recurringRegularMilestoneIds.Count;
-			for (int i = 0; i < count; i++)
-			{
-				AddMilestoneToTriggerValue(recurringRegularMilestoneIds[i], triggerValue);
 			}
 		}
 

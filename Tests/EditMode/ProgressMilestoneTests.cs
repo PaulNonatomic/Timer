@@ -347,6 +347,22 @@ namespace Tests.EditMode
 		}
 
 		[Test]
+		public void ProgressRangeMilestone_WithSubSecondDuration_TriggersAllIntervals()
+		{
+			var shortTimer = new StandardTimer(0.5f);
+			int triggerCount = 0;
+
+			// Intervals at 0.25, 0.5, 0.75 and 1.0 progress; the timer duration is
+			// shorter than 1 second so progress values must not be capped by duration
+			shortTimer.AddRangeMilestone(TimeType.ProgressElapsed, 0.25f, 1f, 0.25f, () => triggerCount++);
+
+			shortTimer.StartTimer();
+			shortTimer.Update(0.5f);
+
+			Assert.AreEqual(4, triggerCount, "All progress intervals should trigger on a sub-second timer");
+		}
+
+		[Test]
 		public void ProgressMilestone_WithLongDuration_Works()
 		{
 			var longTimer = new StandardTimer(3600f); // 1 hour

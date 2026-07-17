@@ -1348,6 +1348,42 @@ namespace Tests.EditMode
 		}
 
 		[Test, Timeout(1000)]
+		public void RecurringMilestone_TriggersEveryRound_WhenRestartedWithStartTimerOnly()
+		{
+			int triggerCount = 0;
+
+			_timer.AddMilestone(new TimerMilestone(TimeType.TimeRemaining, 5f, () => triggerCount++, isRecurring: true));
+
+			// First round
+			_timer.StartTimer();
+			_timer.Update(5f);
+			Assert.AreEqual(1, triggerCount, "Should trigger in first round");
+
+			// Restart without calling ResetTimer
+			_timer.StartTimer();
+			_timer.Update(5f);
+			Assert.AreEqual(2, triggerCount, "Should trigger again after restarting with StartTimer alone");
+		}
+
+		[Test, Timeout(1000)]
+		public void RecurringRangeMilestone_TriggersEveryRound_WhenRestartedWithStartTimerOnly()
+		{
+			int triggerCount = 0;
+
+			_timer.AddRangeMilestone(TimeType.TimeRemaining, 5f, 1f, 1f, () => triggerCount++, isRecurring: true);
+
+			// First round
+			_timer.StartTimer();
+			_timer.Update(9.5f); // Cross all intervals (5, 4, 3, 2, 1)
+			Assert.AreEqual(5, triggerCount, "Should trigger 5 times in first round");
+
+			// Restart without calling ResetTimer
+			_timer.StartTimer();
+			_timer.Update(9.5f);
+			Assert.AreEqual(10, triggerCount, "Should trigger 5 more times after restarting with StartTimer alone");
+		}
+
+		[Test, Timeout(1000)]
 		public void NonRecurringMilestone_OnlyTriggersOnce()
 		{
 			int triggerCount = 0;

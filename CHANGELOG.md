@@ -1,4 +1,14 @@
 # Change Log
+## [0.12.0] - 2026-07-17
+### Fixed
+- Package failed to compile in projects without ServiceKit installed (using directive outside the define guard)
+- Recurring milestones now re-trigger when the timer is restarted with `StartTimer()` alone, not just after `ResetTimer()`
+- Milestones sharing a numeric trigger value across different TimeTypes no longer fire together
+- Progress-based range milestones no longer skip intervals on timers shorter than 1 second
+
+### Changed
+- `TimerRangeMilestone` now throws `ArgumentOutOfRangeException` for zero or negative intervals (previously an infinite loop)
+
 ## [0.11.1] - 2026-04-20
 ### Fixed
 - **ServiceKit version constraint**: Lowered the `TIMERKIT_SERVICEKIT_SUPPORT` version define floor from `2.4.0` to `2.0.0`. ServiceKit has only released up to 2.0.2, so the previous constraint meant the ServiceKit extension (`BaseTimerService`, `ITimerService`, etc. under `Nonatomic.TimerKit.Extensions.ServiceKit`) never compiled in consumer projects. Projects on ServiceKit 2.0.x can now derive from `BaseTimerService` as documented.

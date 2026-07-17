@@ -100,9 +100,19 @@ namespace Nonatomic.TimerKit
 			{
 				TimeRemaining = Duration;
 			}
-			
+
 			IsRunning = true;
+			OnTimerStarted();
 			OnStart?.Invoke();
+		}
+
+		/// <summary>
+		/// Called when the timer starts or restarts, before the OnStart event fires.
+		/// Override this in derived classes to add functionality like re-arming milestones.
+		/// </summary>
+		protected virtual void OnTimerStarted()
+		{
+			//...
 		}
 		
 		/// <summary>
